@@ -69,6 +69,7 @@ dependencies = [
  "rand",
  "rand_chacha",
  "rand_xoshiro",
+ "std-semaphore",
  "tokio",
 ]
 
@@ -293,6 +294,12 @@ dependencies = [
  "libc",
  "windows-sys 0.52.0",
 ]
+
+[[package]]
+name = "std-semaphore"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "33ae9eec00137a8eed469fb4148acd9fc6ac8c3f9b110f52cd34698c8b5bfa0e"
 
 [[package]]
 name = "syn"

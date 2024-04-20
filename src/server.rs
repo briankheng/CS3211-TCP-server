@@ -1,9 +1,11 @@
 use std::error::Error;
 use std::io::{BufRead, BufReader, Write};
 use std::net::{TcpListener, TcpStream};
-use std::sync::mpsc;
+use std::sync::{mpsc, Arc};
+use std::thread;
+use std_semaphore::Semaphore;
 
-use crate::task::Task;
+use crate::task::{Task, TaskType};
 
 pub trait ServerTrait {
     fn start_server(
@@ -33,10 +35,15 @@ impl ServerTrait for Server {
             }
         }
 
+        let sem = Arc::new(Semaphore::new(40));
+
         for stream in listener.unwrap().incoming() {
             match stream {
                 Ok(stream) => {
-                    Self::handle_connection(stream);
+                    let sem_clone = sem.clone();
+                    thread::spawn(move || {
+                        Self::handle_connection(stream, sem_clone);
+                    });
                 }
                 Err(e) => {
                     eprintln!("Error accepting connection: {}", e);
@@ -47,7 +54,7 @@ impl ServerTrait for Server {
 }
 
 impl Server {
-    fn handle_connection(mut stream: TcpStream) {
+    fn handle_connection(mut stream: TcpStream, mut sem: Arc<Semaphore>) {
         loop {
             let mut buf_reader = BufReader::new(&mut stream);
             let mut line = String::new();
@@ -56,7 +63,7 @@ impl Server {
                     return;
                 }
                 Ok(_) => {
-                    let response = Self::get_task_value(line);
+                    let response = Self::get_task_value(line, &mut sem);
                     if let Some(r) = response {
                         stream.write(&[r]).unwrap();
                     }
@@ -69,12 +76,17 @@ impl Server {
         }
     }
 
-    fn get_task_value(buf: String) -> Option<u8> {
+    fn get_task_value(buf: String, sem: &mut Arc<Semaphore>) -> Option<u8> {
         let try_parse = || -> Result<u8, Box<dyn std::error::Error>> {
             let numbers: Vec<&str> = buf.trim().split(':').collect();
             let task_type = numbers.first().unwrap().parse::<u8>()?;
             let seed = numbers.last().unwrap().parse::<u64>()?;
-
+            
+            if TaskType::from_u8(task_type).unwrap() == TaskType::CpuIntensiveTask {
+                let _guard = sem.access();
+                let result = Task::execute(task_type, seed);
+                return Ok(result);
+            }
             let result = Task::execute(task_type, seed);
             Ok(result)
         };
